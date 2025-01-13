@@ -12,6 +12,7 @@ const { doHash, doHashValidation, hmacProcess } = require('../utils/hashing');
 const transport = require('../middlewares/sendMail');
 
 
+
 exports.signup = async (req, res) => {
     // Log the request body to check if the data is being received correctly
     console.log('Request Body:', req.body);
@@ -253,47 +254,91 @@ exports.verifyVerificationCode = async (req, res) => {
 	}
 };
 
+// exports.changePassword = async (req, res) => {
+// 	const { userId, verified } = req.user;
+// 	const { oldPassword, newPassword } = req.body;
+// 	try {
+// 		const { error, value } = changePasswordSchema.validate({
+// 			oldPassword,
+// 			newPassword,
+// 		});
+// 		if (error) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: error.details[0].message });
+// 		}
+// 		if (!verified) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: 'You are not verified user!' });
+// 		}
+// 		const existingUser = await User.findOne({ _id: userId }).select(
+// 			'+password'
+// 		);
+// 		if (!existingUser) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: 'User does not exists!' });
+// 		}
+// 		const result = await doHashValidation(oldPassword, existingUser.password);
+// 		if (!result) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: 'Invalid credentials!' });
+// 		}
+// 		const hashedPassword = await doHash(newPassword, 12);
+// 		existingUser.password = hashedPassword;
+// 		await existingUser.save();
+// 		return res
+// 			.status(200)
+// 			.json({ success: true, message: 'Password updated!!' });
+// 	} catch (error) {
+// 		console.log(error);
+// 	}
+// };
+
+
+
+
+
 exports.changePassword = async (req, res) => {
-	const { userId, verified } = req.user;
-	const { oldPassword, newPassword } = req.body;
-	try {
-		const { error, value } = changePasswordSchema.validate({
-			oldPassword,
-			newPassword,
-		});
-		if (error) {
-			return res
-				.status(401)
-				.json({ success: false, message: error.details[0].message });
-		}
-		if (!verified) {
-			return res
-				.status(401)
-				.json({ success: false, message: 'You are not verified user!' });
-		}
-		const existingUser = await User.findOne({ _id: userId }).select(
-			'+password'
-		);
-		if (!existingUser) {
-			return res
-				.status(401)
-				.json({ success: false, message: 'User does not exists!' });
-		}
-		const result = await doHashValidation(oldPassword, existingUser.password);
-		if (!result) {
-			return res
-				.status(401)
-				.json({ success: false, message: 'Invalid credentials!' });
-		}
-		const hashedPassword = await doHash(newPassword, 12);
-		existingUser.password = hashedPassword;
-		await existingUser.save();
-		return res
-			.status(200)
-			.json({ success: true, message: 'Password updated!!' });
-	} catch (error) {
-		console.log(error);
-	}
+    const { userId, verified } = req.user;
+    const { oldPassword, newPassword } = req.body;
+
+    try {
+        // Validate passwords
+        const { error, value } = changePasswordSchema.validate({ oldPassword, newPassword });
+        if (error) {
+            return res.status(401).json({ success: false, message: error.details[0].message });
+        }
+
+        // Check if the user is verified
+        if (!verified) {
+            return res.status(401).json({ success: false, message: 'You are not verified user!' });
+        }
+
+        // Find the user in the database
+        const existingUser = await User.findOne({ _id: userId }).select('+password');
+        if (!existingUser) {
+            return res.status(401).json({ success: false, message: 'User does not exists!' });
+        }
+
+        // Validate old password
+        const result = await doHashValidation(oldPassword, existingUser.password);
+        if (!result) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials!' });
+        }
+
+        // Hash and update the new password
+        const hashedPassword = await doHash(newPassword, 12);
+        existingUser.password = hashedPassword;
+        await existingUser.save();
+
+        return res.status(200).json({ success: true, message: 'Password updated!!' });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ success: false, message: 'An error occurred!' });
+    }
 };
 
 exports.sendForgotPasswordCode = async (req, res) => {
@@ -396,3 +441,7 @@ exports.verifyForgotPasswordCode = async (req, res) => {
 		console.log(error);
 	}
 };
+
+
+
+
