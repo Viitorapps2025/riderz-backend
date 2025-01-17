@@ -13,8 +13,6 @@ const transport = require('../middlewares/sendMail');
 
 
 <<<<<<< HEAD
-const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 
 =======
 >>>>>>> f1455586ba7a2598b1356a17e0ea96b52541b4fe
