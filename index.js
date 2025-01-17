@@ -6,10 +6,16 @@ const mongoose = require('mongoose');
 
 const authRouter = require('./routers/authRouter');
 const postsRouter = require('./routers/postsRouter');
+const tripRouter = require('./routers/tripRouter')
 
 PORT =3000;
 const app = express();
-app.use(cors());
+app.use(
+	cors({
+	  origin: "http://localhost:5173",
+	  credentials: true, 
+	})
+  );
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
@@ -29,6 +35,7 @@ mongoose
 
 app.use('/api/auth', authRouter);
 app.use('/api/posts', postsRouter);
+app.use('/api', tripRouter);
 app.get('/', (req, res) => {
 	res.json({ message: 'Hello from the server' });
 });

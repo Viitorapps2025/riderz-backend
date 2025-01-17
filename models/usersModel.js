@@ -51,10 +51,21 @@ const userSchema = mongoose.Schema(
 			unique: [true, 'Phone number must be unique!'],
 			match: [/^\+?[1-9]\d{1,14}$/, 'Phone number must be valid!'], // Validates E.164 format
 		},
+		verificationCode: {
+			type: String,
+			select: false, // Exclude from queries by default
+		},
+		verificationCodeValidation: {
+			type: Number,
+			select: false, // Exclude from queries by default
+		},
+		
 	},
 	{
 		timestamps: true,
 	}
+	
+	
 );
 
 module.exports = mongoose.model('User', userSchema);

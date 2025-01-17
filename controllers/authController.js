@@ -12,42 +12,43 @@ const { doHash, doHashValidation, hmacProcess } = require('../utils/hashing');
 const transport = require('../middlewares/sendMail');
 
 
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+
+
 exports.signup = async (req, res) => {
-    // Log the request body to check if the data is being received correctly
     console.log('Request Body:', req.body);
 
-    // Destructure the data from the request body
     const { email, password, fullname, phone } = req.body;
 
     try {
-        // Validate the incoming data against the schema
         const { error } = signupSchema.validate({ email, password, fullname, phone });
 
-        // If validation fails, return an error response
         if (error) {
-            console.log('Validation Error:', error.details[0].message); // Log the error details for debugging
+            console.log('Validation Error:', error.details[0].message);
             return res.status(401).json({
                 success: false,
-                message: error.details[0].message, // Send the validation error message
+                message: error.details[0].message,
             });
         }
 
-        // Check if a user already exists with the same email or phone
         const existingUser = await User.findOne({
             $or: [{ email }, { phone }],
         });
 
         if (existingUser) {
-            console.log('User already exists with email or phone:', existingUser); // Log existing user for debugging
+            console.log('User already exists with email or phone:', existingUser);
             return res.status(401).json({
                 success: false,
                 message: 'User with this email or phone already exists!',
             });
         }
 
-        // Hash the password
-        console.log('Hashing password...');
         const hashedPassword = await doHash(password, 12);
+
+        // Generate OTP
+        const otp = crypto.randomInt(100000, 999999); // Generate a 6-digit OTP
+        const otpExpiration = Date.now() + 60 * 60 * 1000; // OTP valid for 60 minutes
 
         // Create a new user object
         const newUser = new User({
@@ -55,22 +56,35 @@ exports.signup = async (req, res) => {
             password: hashedPassword,
             fullname,
             phone,
+            verificationCode: otp,
+            verificationCodeValidation: otpExpiration,
         });
 
-        // Save the new user to the database
-        console.log('Saving new user to the database...');
         const result = await newUser.save();
-        result.password = undefined; // Don't send the password in the response
 
-        // Send a success response
-        console.log('User created successfully:', result);
+        // Send OTP to the user's email
+        const transporter = nodemailer.createTransport({
+            service: 'Gmail',
+            auth: {
+                user: process.env.NODE_CODE_SENDING_EMAIL_ADDRESS, // Your email
+                pass: process.env.NODE_CODE_SENDING_EMAIL_PASSWORD, // Your email password
+            },
+        });
+
+        await transporter.sendMail({
+            from: process.env.EMAIL,
+            to: email,
+            subject: 'Your Verification Code',
+            text: `Your OTP is ${otp}. It is valid for 60 minutes.`,
+        });
+
+        console.log('OTP sent to email:', email);
+
         res.status(201).json({
             success: true,
-            message: 'Your account has been created successfully',
-            result,
+            message: 'Your account has been created. Please verify your email with the OTP sent.',
         });
     } catch (error) {
-        // Catch any other errors and return a server error response
         console.error('Error in signup:', error);
         res.status(500).json({
             success: false,
@@ -79,7 +93,64 @@ exports.signup = async (req, res) => {
     }
 };
 
+exports.verifyOtp = async (req, res) => { 
+    const { email, otp } = req.body;
 
+    try {
+        const user = await User.findOne({ email }).select('+verificationCode +verificationCodeValidation');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found!',
+            });
+        }
+
+        if (user.verified) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is already verified!',
+            });
+        }
+
+        if (user.verificationCode !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid OTP!',
+            });
+        }
+
+        if (user.verificationCodeValidation < Date.now()) {
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired!',
+            });
+        }
+
+        // Mark the user as verified
+        user.verified = true;
+        user.verificationCode = undefined;
+        user.verificationCodeValidation = undefined;
+
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Your account has been verified successfully!',
+        });
+    } catch (error) {
+        console.error('Error in OTP verification:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while verifying your account. Please try again later.',
+        });
+    }
+};
+
+
+
+
+  
   exports.signin = async (req, res) => {
     try {
         console.log('Raw Request Body:', req.body);
@@ -253,47 +324,91 @@ exports.verifyVerificationCode = async (req, res) => {
 	}
 };
 
+// exports.changePassword = async (req, res) => {
+// 	const { userId, verified } = req.user;
+// 	const { oldPassword, newPassword } = req.body;
+// 	try {
+// 		const { error, value } = changePasswordSchema.validate({
+// 			oldPassword,
+// 			newPassword,
+// 		});
+// 		if (error) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: error.details[0].message });
+// 		}
+// 		if (!verified) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: 'You are not verified user!' });
+// 		}
+// 		const existingUser = await User.findOne({ _id: userId }).select(
+// 			'+password'
+// 		);
+// 		if (!existingUser) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: 'User does not exists!' });
+// 		}
+// 		const result = await doHashValidation(oldPassword, existingUser.password);
+// 		if (!result) {
+// 			return res
+// 				.status(401)
+// 				.json({ success: false, message: 'Invalid credentials!' });
+// 		}
+// 		const hashedPassword = await doHash(newPassword, 12);
+// 		existingUser.password = hashedPassword;
+// 		await existingUser.save();
+// 		return res
+// 			.status(200)
+// 			.json({ success: true, message: 'Password updated!!' });
+// 	} catch (error) {
+// 		console.log(error);
+// 	}
+// };
+
+
+
+
+
 exports.changePassword = async (req, res) => {
-	const { userId, verified } = req.user;
-	const { oldPassword, newPassword } = req.body;
-	try {
-		const { error, value } = changePasswordSchema.validate({
-			oldPassword,
-			newPassword,
-		});
-		if (error) {
-			return res
-				.status(401)
-				.json({ success: false, message: error.details[0].message });
-		}
-		if (!verified) {
-			return res
-				.status(401)
-				.json({ success: false, message: 'You are not verified user!' });
-		}
-		const existingUser = await User.findOne({ _id: userId }).select(
-			'+password'
-		);
-		if (!existingUser) {
-			return res
-				.status(401)
-				.json({ success: false, message: 'User does not exists!' });
-		}
-		const result = await doHashValidation(oldPassword, existingUser.password);
-		if (!result) {
-			return res
-				.status(401)
-				.json({ success: false, message: 'Invalid credentials!' });
-		}
-		const hashedPassword = await doHash(newPassword, 12);
-		existingUser.password = hashedPassword;
-		await existingUser.save();
-		return res
-			.status(200)
-			.json({ success: true, message: 'Password updated!!' });
-	} catch (error) {
-		console.log(error);
-	}
+    const { userId, verified } = req.user;
+    const { oldPassword, newPassword } = req.body;
+
+    try {
+        // Validate passwords
+        const { error, value } = changePasswordSchema.validate({ oldPassword, newPassword });
+        if (error) {
+            return res.status(401).json({ success: false, message: error.details[0].message });
+        }
+
+        // Check if the user is verified
+        if (!verified) {
+            return res.status(401).json({ success: false, message: 'You are not verified user!' });
+        }
+
+        // Find the user in the database
+        const existingUser = await User.findOne({ _id: userId }).select('+password');
+        if (!existingUser) {
+            return res.status(401).json({ success: false, message: 'User does not exists!' });
+        }
+
+        // Validate old password
+        const result = await doHashValidation(oldPassword, existingUser.password);
+        if (!result) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials!' });
+        }
+
+        // Hash and update the new password
+        const hashedPassword = await doHash(newPassword, 12);
+        existingUser.password = hashedPassword;
+        await existingUser.save();
+
+        return res.status(200).json({ success: true, message: 'Password updated!!' });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ success: false, message: 'An error occurred!' });
+    }
 };
 
 exports.sendForgotPasswordCode = async (req, res) => {
@@ -322,7 +437,7 @@ exports.sendForgotPasswordCode = async (req, res) => {
 			existingUser.forgotPasswordCode = hashedCodeValue;
 			existingUser.forgotPasswordCodeValidation = Date.now();
 			await existingUser.save();
-			return res.status(200).json({ success: true, message: 'Code sent!' });
+			return res.status(200).json({ success: true, message: 'Code sent!',codeValue });
 		}
 		res.status(400).json({ success: false, message: 'Code sent failed!' });
 	} catch (error) {
@@ -396,3 +511,7 @@ exports.verifyForgotPasswordCode = async (req, res) => {
 		console.log(error);
 	}
 };
+
+
+
+
