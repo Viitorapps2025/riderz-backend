@@ -8,6 +8,10 @@ const tripSchema = new mongoose.Schema({
   },
   id: { type: Number, required: true },
   title: { type: String, required: true },
+  date: {
+    type: Date,
+    required: true,
+  },
   price: { type: Number, required: true },
   discount: { type: String },
   images: { type: [String], required: true },

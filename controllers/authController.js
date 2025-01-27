@@ -11,7 +11,8 @@ const User = require('../models/usersModel');
 const { doHash, doHashValidation, hmacProcess } = require('../utils/hashing');
 const transport = require('../middlewares/sendMail');
 
-const crypto = require ('crypto');
+
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
 
